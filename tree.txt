@@ -1,0 +1,30 @@
+digraph tree {
+	"('___root___',)" [label="___root___", shape=circle]
+	"('___root___', 'empty')" [label="empty", shape=circle]
+	"('___root___', 'empty_2')" [label="empty_2", shape=circle]
+	"('___root___', 'other')" [label="other", shape=circle]
+	"('___root___', 'test')" [label="test", shape=circle]
+	"('___root___', 'other', '0')" [label="0", shape=circle]
+	"('___root___', 'other', '1')" [label="1", shape=circle]
+	"('___root___', 'other', '2')" [label="2", shape=circle]
+	"('___root___', 'test', 'iest')" [label="iest", shape=circle]
+	"('___root___', 'test', 'iest', '0')" [label="0", shape=circle]
+	"('___root___', 'test', 'iest', '1')" [label="1", shape=circle]
+	"('___root___', 'test', 'iest', '1', '0')" [label="0", shape=circle]
+	"('___root___', 'test', 'iest', '1', '1')" [label="1", shape=circle]
+	"('___root___', 'test', 'iest', '1', '2')" [label="2", shape=circle]
+
+	"('___root___',)" -> "('___root___', 'test')"
+	"('___root___',)" -> "('___root___', 'other')"
+	"('___root___',)" -> "('___root___', 'empty')"
+	"('___root___',)" -> "('___root___', 'empty_2')"
+	"('___root___', 'other')" -> "('___root___', 'other', '0')"
+	"('___root___', 'other')" -> "('___root___', 'other', '1')"
+	"('___root___', 'other')" -> "('___root___', 'other', '2')"
+	"('___root___', 'test')" -> "('___root___', 'test', 'iest')"
+	"('___root___', 'test', 'iest')" -> "('___root___', 'test', 'iest', '0')"
+	"('___root___', 'test', 'iest')" -> "('___root___', 'test', 'iest', '1')"
+	"('___root___', 'test', 'iest', '1')" -> "('___root___', 'test', 'iest', '1', '0')"
+	"('___root___', 'test', 'iest', '1')" -> "('___root___', 'test', 'iest', '1', '1')"
+	"('___root___', 'test', 'iest', '1')" -> "('___root___', 'test', 'iest', '1', '2')"
+}
