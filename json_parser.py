@@ -5,8 +5,12 @@ from treelib import Tree, Node
 from numbers import Number
 from more_itertools import sort_together, split_when, bucket
 from itertools import groupby
+from collections import namedtuple
 
 import torch
+
+
+NodeData = namedtuple('NodeData', ['type', 'data'])
 
 
 def is_primitive(node):
@@ -16,6 +20,22 @@ def is_primitive(node):
             or isinstance(node, str)
             or node is None
     )
+
+def node_type(node):
+    if isinstance(node, Number):
+        return '___number___'
+    elif isinstance(node, bool):
+        return '___bool___'
+    elif isinstance(node, str):
+        return '___string___'
+    elif isinstance(node, dict):
+        return '___object___'
+    elif isinstance(node, list):
+        return '___array___'
+    elif node is None:
+        return '___null___'
+    else:
+        raise ValueError('node must be of type numbers.Number, bool, str, or NoneType')
 
 
 def is_array(node):
@@ -39,7 +59,7 @@ class JSONParseTree(Tree):
     @classmethod
     def parse_start(cls, root_name: str, node: Any) -> JSONParseTree:
         tree = cls()
-        tree.create_node(tag=root_name, identifier=(root_name,), data=node)
+        tree.create_node(tag=root_name, identifier=(root_name,), data=NodeData(node_type(node), None))
         if is_array(node):
             for i, child in enumerate(node):
                 tree.parse_object((root_name,), str(i), child)
@@ -50,12 +70,18 @@ class JSONParseTree(Tree):
 
     def parse_object(self, parent_path: tuple, name: str, node: Any):
         if is_primitive(node):
-            self.create_node(tag=name, identifier=parent_path + (name,), parent=parent_path, data=node)
+            self.create_node(
+                    tag=name,
+                    identifier=parent_path + (name,),
+                    parent=parent_path,
+                    data=NodeData(node_type(node), node)
+            )
         elif is_array(node):
             self.create_node(
                     tag=name,
                     identifier=(new_path := parent_path + (name,)),
-                    parent=parent_path, data='___array___'
+                    parent=parent_path,
+                    data=NodeData('___array___', None)
             )
             for i, child in enumerate(node):
                 self.parse_object(new_path, str(i), child)
@@ -63,11 +89,12 @@ class JSONParseTree(Tree):
             self.create_node(
                     tag=name,
                     identifier=(new_path := parent_path + (name,)),
-                    parent=parent_path, data='___dict___')
+                    parent=parent_path,
+                    data=NodeData('___dict___', None))
             for child_name, child in node.items():
                 self.parse_object(new_path, child_name, child)
 
-    def leaf_data(self) -> Tuple[Tuple, Any]:
+    def leaf_data(self) -> Tuple[Tuple, NodeData]:
         for leaf in self.leaves():
             yield leaf.identifier, leaf.data
 
@@ -82,6 +109,17 @@ class JSONParseTree(Tree):
             else:
                 data = torch.zeros(1, 1)
             yield leaf.identifier, data
+
+    def __eq__(self, other):
+        if not isinstance(other, JSONParseTree):
+            return False
+        self_nodes = sorted(self.nodes)
+        other_nodes = sorted(other.nodes)
+
+        return self_nodes == other_nodes
+
+    def __hash__(self):
+        return hash(tuple(sorted(self.nodes)))
 
 
 if __name__ == '__main__':
