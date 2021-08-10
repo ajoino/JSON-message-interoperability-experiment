@@ -4,7 +4,6 @@ from torch import nn
 from torch.utils.data import Dataset, DataLoader
 import pytorch_lightning as pl
 import sklearn
-pl.LightningDataModule()
 
 from json2vec import JSONTreeLSTM
 from datasets import load_seismic_dataset

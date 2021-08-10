@@ -2,6 +2,7 @@ from json2vec import JSONTreeLSTM
 import torch
 from datasets import load_seismic_dataset
 from pytorch_lightning_test import JsonTreeSystem
+from json_decoder_lstm import JSONStructureDecoder
 
 jsons, vectors, labels = load_seismic_dataset()
 
@@ -28,8 +29,22 @@ from tqdm import tqdm
 for some_json in tqdm(jsons):
     output_3 = model(some_json)
 """
-model("""[1, [2, {"num": {"as_text": "four", "as_int": 4}}]]""")
+#model("""[1, [2, {"num": {"as_text": "four", "as_int": 4}}]]""")
 from prettytable import PrettyTable
+from json_data_module import JSONDataModule
+
+data_module = JSONDataModule("some_json.json"); data_module.setup()
+data_loader = data_module.train_dataloader()
+
+json_decoder = JSONStructureDecoder(128)
+
+output = json_decoder(torch.randn(1,10,128), torch.randn(1,10,128))
+
+exit()
+
+for batch in data_loader:
+    output = model(batch)
+
 
 def count_parameters(model):
     table = PrettyTable(["Modules", "Parameters"])
