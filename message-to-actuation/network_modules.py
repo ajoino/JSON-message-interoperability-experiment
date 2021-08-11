@@ -1,3 +1,4 @@
+import os
 from collections import Sequence
 from pathlib import Path
 from typing import Any, List
@@ -18,6 +19,12 @@ class MessageEncoder(pl.LightningModule):
         self.jsontreelstm = JSONTreeLSTM(mem_dim)
         self.compress_tree = nn.Linear(2 * mem_dim, 10)
         self.output = nn.Linear(11, 1)
+
+    def on_train_start(self):
+        self.jsontreelstm.device = self.device
+
+    def on_validation_start(self):
+        self.jsontreelstm.device = self.device
 
     def forward(self, messages: Sequence[str], setpoints: torch.Tensor):
         encoded_messages = torch.relu(torch.cat([self.jsontreelstm(message) for message in messages]))
@@ -47,17 +54,16 @@ class MessageEncoder(pl.LightningModule):
 
 
 if __name__ == '__main__':
-    checkpoint_callback = ModelCheckpoint(monitor='val_loss')
     model = MessageEncoder()
     trainer = Trainer(
-            limit_train_batches=5,
-            limit_val_batches=3,
+	    gpus=1,
+            max_epochs=4,
             callbacks=[
-                checkpoint_callback,
+                ModelCheckpoint(monitor='val_loss'),
                 EarlyStopping(monitor='val_loss'),
             ],
     )
 
-    message_data = SimulationDataModule(Path('../simulation_data.csv'), batch_size=64)
+    message_data = SimulationDataModule(Path('../simulation_data.csv'), batch_size=32)
     trainer.fit(model, message_data)
 

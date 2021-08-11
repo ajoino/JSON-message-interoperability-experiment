@@ -53,10 +53,10 @@ class SimulationDataModule(pl.LightningDataModule):
 
 
     def train_dataloader(self):
-        return DataLoader(self.message_data_train, batch_size=self.batch_size)
+        return DataLoader(self.message_data_train, batch_size=self.batch_size, num_workers=20)
 
     def val_dataloader(self):
-        return DataLoader(self.message_data_val, batch_size=self.batch_size)
+        return DataLoader(self.message_data_val, batch_size=self.batch_size, num_workers=20)
 
     def test_dataloader(self):
-        return DataLoader(self.message_data_test, batch_size=200)
+        return DataLoader(self.message_data_test, batch_size=200, num_workers=20)
