@@ -11,6 +11,7 @@ class MessageDataset(Dataset):
             file_path: Union[Path, str],
             train: bool = False,
             validation: bool = False,
+            message_transform: Any = None,
             setpoint_transform: Any = None,
             actuation_transform: Any = None,
             room_transform: Any = None,
@@ -30,6 +31,7 @@ class MessageDataset(Dataset):
         message = self.simulation_data.loc[idx//2, 'messages_a'] if idx % 2 == 0 else self.simulation_data['messages_b'][idx//2]
         room_name_sample, setpoint_sample, actuation_sample = (self.simulation_data.loc[idx//2, column]
                                                                for column in ('room_name', 'setpoint', 'actuation'))
+
         if self.room_transform:
             room_name_sample = self.room_transform((self.room_categories.get_loc(room_name_sample), ))
         else:

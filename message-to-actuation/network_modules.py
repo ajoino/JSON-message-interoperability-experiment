@@ -14,9 +14,9 @@ from json2vec.json2vec import JSONTreeLSTM
 from datamodule import SimulationDataModule
 
 class MessageEncoder(pl.LightningModule):
-    def __init__(self, mem_dim: int = 64):
+    def __init__(self, mem_dim: int = 64, decode_json: bool = False):
         super().__init__()
-        self.jsontreelstm = JSONTreeLSTM(mem_dim)
+        self.jsontreelstm = JSONTreeLSTM(mem_dim, decode_json)
         self.compress_tree = nn.Linear(2 * mem_dim, 10)
         self.output = nn.Linear(11, 1)
 
@@ -54,9 +54,9 @@ class MessageEncoder(pl.LightningModule):
 
 
 if __name__ == '__main__':
-    model = MessageEncoder()
+    model = MessageEncoder(decode_json=True)
     trainer = Trainer(
-	    gpus=1,
+	    gpus = 1 if torch.cuda.is_available() else None,
             max_epochs=4,
             callbacks=[
                 ModelCheckpoint(monitor='val_loss'),
@@ -64,6 +64,6 @@ if __name__ == '__main__':
             ],
     )
 
-    message_data = SimulationDataModule(Path('../simulation_data.csv'), batch_size=32)
+    message_data = SimulationDataModule(Path('../simulation_data.csv'), batch_size=32, decode_json=True, num_workers=2)
     trainer.fit(model, message_data)
 
