@@ -17,8 +17,8 @@ class MessageEncoder(pl.LightningModule):
     def __init__(self, mem_dim: int = 64, decode_json: bool = False):
         super().__init__()
         self.jsontreelstm = JSONTreeLSTM(mem_dim, decode_json)
-        self.compress_tree = nn.Linear(2 * mem_dim, 10)
-        self.output = nn.Linear(11, 1)
+        self.compress_tree = nn.Linear(2 * mem_dim + 1, 10)
+        self.output = nn.Linear(10, 1)
 
     def on_train_start(self):
         self.jsontreelstm.device = self.device
@@ -28,7 +28,7 @@ class MessageEncoder(pl.LightningModule):
 
     def forward(self, messages: Sequence[str], setpoints: torch.Tensor):
         encoded_messages = torch.relu(torch.cat([self.jsontreelstm(message) for message in messages]))
-        compressed_encodings = torch.cat([torch.relu(self.compress_tree(encoded_messages)), setpoints], dim=1)
+        compressed_encodings = torch.relu(self.compress_tree(torch.cat([encoded_messages, setpoints], dim=1)))
 
         return self.output(compressed_encodings)
 
@@ -50,11 +50,12 @@ class MessageEncoder(pl.LightningModule):
         self.log('val_loss', mean_val_loss, prog_bar=True)
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=0.02)
+        #return torch.optim.Adam(self.parameters(), lr=0.02)
+        return torch.optim.SGD(self.parameters(), lr=0.01, momentum=0.9)
 
 
 if __name__ == '__main__':
-    model = MessageEncoder(decode_json=True)
+    model = MessageEncoder(mem_dim=32, decode_json=True)
     trainer = Trainer(
 	    gpus = 1 if torch.cuda.is_available() else None,
             max_epochs=4,
@@ -64,6 +65,6 @@ if __name__ == '__main__':
             ],
     )
 
-    message_data = SimulationDataModule(Path('../simulation_data.csv'), batch_size=32, decode_json=True, num_workers=2)
+    message_data = SimulationDataModule(Path('../simulation_data.csv'), batch_size=16, decode_json=True, num_workers=20)
     trainer.fit(model, message_data)
 
