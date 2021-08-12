@@ -27,10 +27,12 @@ class MessageDataset(Dataset):
     def __len__(self) -> int:
         return 2*len(self.simulation_data)
 
-    def __getitem__(self, idx: int) -> Tuple[List[Dict], int, float, float]: # Returns message, room label, setpoint, and actuation value
+    def __getitem__(self, idx: int) -> Tuple[List[Dict], int, float, float, float]: # Returns message, room label, setpoint, and actuation value
         message = self.simulation_data.loc[idx//2, 'messages_a'] if idx % 2 == 0 else self.simulation_data['messages_b'][idx//2]
-        room_name_sample, setpoint_sample, actuation_sample = (self.simulation_data.loc[idx//2, column]
-                                                               for column in ('room_name', 'setpoint', 'actuation'))
+        room_name_sample, setpoint_sample, actuation_sample, prev_actuation_sample = (
+            self.simulation_data.loc[idx//2, column]
+            for column in ('room_name', 'setpoint', 'actuation', 'previous_actuation')
+        )
 
         if self.room_transform:
             room_name_sample = self.room_transform((self.room_categories.get_loc(room_name_sample), ))
@@ -40,11 +42,13 @@ class MessageDataset(Dataset):
             setpoint_sample = self.setpoint_transform((setpoint_sample, ))
         if self.actuation_transform:
             actuation_sample = self.actuation_transform((actuation_sample, ))
+            prev_actuation_sample = self.actuation_transform((prev_actuation_sample, ))
         return (
             message,
             room_name_sample,
             setpoint_sample,
             actuation_sample,
+            prev_actuation_sample
         )
 
 if __name__ == '__main__':

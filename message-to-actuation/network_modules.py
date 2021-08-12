@@ -26,15 +26,15 @@ class MessageEncoder(pl.LightningModule):
     def on_validation_start(self):
         self.jsontreelstm.device = self.device
 
-    def forward(self, messages: Sequence[str], setpoints: torch.Tensor):
+    def forward(self, messages: Sequence[str], setpoints: torch.Tensor, previous_actuations: torch.Tensor):
         encoded_messages = torch.relu(torch.cat([self.jsontreelstm(message) for message in messages]))
         compressed_encodings = torch.cat([torch.relu(self.compress_tree(encoded_messages)), setpoints], dim=1)
 
         return self.output(compressed_encodings)
 
     def training_step(self, batch, batch_idx):
-        messages, room_labels, setpoints, actuations = batch
-        estimated_actuations = self(messages, setpoints)
+        messages, room_labels, setpoints, actuations, prev_actuations = batch
+        estimated_actuations = self(messages, setpoints, prev_actuations)
         train_loss = torch.nn.functional.mse_loss(estimated_actuations, actuations)
         self.log('train_loss', train_loss)
         return train_loss
