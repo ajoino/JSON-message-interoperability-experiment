@@ -9,7 +9,8 @@ from torch.utils.data import DataLoader, Subset, random_split
 from torch.utils.data.dataloader import default_collate
 from torchvision import transforms
 
-import ujson as json
+#import ujson as json
+import json
 
 from dataset import MessageDataset
 
@@ -37,12 +38,11 @@ class SimulationDataModule(pl.LightningDataModule):
         ])
         self.room_name_transform = transforms.Compose([
             torch.LongTensor,
-            partial(nn.functional.one_hot, num_classes=6)
         ])
 
     def setup(self, stage: Optional[str] = None):
 
-        if stage == 'fit' or stage is None:
+        if stage in {'fit', 'predict'} or stage is None:
             self.message_data_train, self.message_data_val = random_split(
                     Subset(md := MessageDataset(
                         self.data_dir,
@@ -64,7 +64,6 @@ class SimulationDataModule(pl.LightningDataModule):
             )
 
     def train_dataloader(self):
-        print(self.num_workers)
         return DataLoader(
                 self.message_data_train,
                 batch_size=self.batch_size,
@@ -83,6 +82,14 @@ class SimulationDataModule(pl.LightningDataModule):
     def test_dataloader(self):
         return DataLoader(
                 self.message_data_test,
+                batch_size=200,
+                num_workers=self.num_workers,
+                collate_fn=partial(list_collator, decode_json=self.decode_json),
+        )
+
+    def predict_dataloader(self):
+        return DataLoader(
+                self.message_data_val,
                 batch_size=200,
                 num_workers=self.num_workers,
                 collate_fn=partial(list_collator, decode_json=self.decode_json),

@@ -1,3 +1,4 @@
+import csv
 from pathlib import Path
 from typing import Any, Optional, Tuple, Dict, List, Union
 
@@ -16,7 +17,9 @@ class MessageDataset(Dataset):
             actuation_transform: Any = None,
             room_transform: Any = None,
     ):
-        self.simulation_data = pd.read_csv(file_path, sep=';').dropna().reset_index(drop=True)
+        simulation_data = pd.read_csv(file_path, sep=';').dropna().reset_index(drop=True)
+        self.simulation_data = simulation_data[simulation_data['system'] == 'temp_sensor'].reset_index(drop=True)
+        self.simulation_data['message'] = self.simulation_data['message'].str.replace("'", '"')
         self.room_categories = pd.Categorical(self.simulation_data['room_name']).categories
         self.train = train
         self.validation = validation
@@ -25,12 +28,12 @@ class MessageDataset(Dataset):
         self.room_transform = room_transform
 
     def __len__(self) -> int:
-        return 2*len(self.simulation_data)
+        return len(self.simulation_data)
 
     def __getitem__(self, idx: int) -> Tuple[List[Dict], int, float, float, float]: # Returns message, room label, setpoint, and actuation value
-        message = self.simulation_data.loc[idx//2, 'messages_a'] if idx % 2 == 0 else self.simulation_data['messages_b'][idx//2]
+        message = self.simulation_data.loc[idx, 'message']
         room_name_sample, setpoint_sample, actuation_sample, prev_actuation_sample = (
-            self.simulation_data.loc[idx//2, column]
+            self.simulation_data.loc[idx, column]
             for column in ('room_name', 'setpoint', 'actuation', 'previous_actuation')
         )
 
