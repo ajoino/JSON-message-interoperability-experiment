@@ -21,6 +21,7 @@ class MessageDataset(Dataset):
         self.simulation_data = simulation_data[simulation_data['system'] == 'temp_sensor'].reset_index(drop=True)
         self.simulation_data['message'] = self.simulation_data['message'].str.replace("'", '"')
         self.room_categories = pd.Categorical(self.simulation_data['room_name']).categories
+        self.simulation_data = self.simulation_data.sample(frac = 1)
         self.train = train
         self.validation = validation
         self.setpoint_transform = setpoint_transform

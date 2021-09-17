@@ -22,12 +22,25 @@ def list_collator(batch, decode_json=False):
 
 
 class SimulationDataModule(pl.LightningDataModule):
-    def __init__(self, data_dir: Path, batch_size: int = 32, decode_json: bool = False, num_workers: int = 4):
+    def __init__(
+            self,
+            data_dir: Path,
+            batch_size: int = 32,
+            decode_json: bool = False,
+            num_workers: int = 4,
+            train_size: int = 55000,
+            val_size: int = 5000,
+            test_size: int = 10000,
+    ):
         super().__init__()
         self.data_dir = data_dir
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.decode_json = decode_json
+        self.train_size = train_size
+        self.val_size = val_size
+        self.test_size = test_size
+
         self.setpoint_transform = transforms.Compose([
             torch.Tensor,
             lambda x: (x - 296) / 10,
@@ -49,8 +62,8 @@ class SimulationDataModule(pl.LightningDataModule):
                         room_transform=self.room_name_transform,
                         setpoint_transform=self.setpoint_transform,
                         actuation_transform=self.actuation_transform,
-                    ), [i for i in range(60000)])
-                    , [55000, 5000]
+                    ), [i for i in range(self.train_size + self.val_size)])
+                    , [self.train_size, self.val_size]
             )
 
         if stage == 'test' or stage is None:
@@ -60,7 +73,7 @@ class SimulationDataModule(pl.LightningDataModule):
                     room_transform=self.room_name_transform,
                     setpoint_transform=self.setpoint_transform,
                     actuation_transform=self.actuation_transform
-                    ), [i for i in range(len(md) - 10000, len(md))]
+                    ), list(range(self.test_size)) if self.test_size > 0 else md
             )
 
     def train_dataloader(self):
@@ -82,7 +95,7 @@ class SimulationDataModule(pl.LightningDataModule):
     def test_dataloader(self):
         return DataLoader(
                 self.message_data_test,
-                batch_size=200,
+                batch_size=self.batch_size,
                 num_workers=self.num_workers,
                 collate_fn=partial(list_collator, decode_json=self.decode_json),
         )
@@ -90,7 +103,7 @@ class SimulationDataModule(pl.LightningDataModule):
     def predict_dataloader(self):
         return DataLoader(
                 self.message_data_val,
-                batch_size=200,
+                batch_size=self.batch_size,
                 num_workers=self.num_workers,
                 collate_fn=partial(list_collator, decode_json=self.decode_json),
         )
