@@ -41,8 +41,8 @@ def start_training_processes(
     dropout_rates = dropout_rates or [0.5]
     alphas = alphas or [0.999]
     batch_size = 50
-    train_size = 55000
-    val_size = 5000
+    train_size = 200000
+    val_size = 10000
 
     parameter_list = itertools.product(
             mem_dims,
@@ -89,15 +89,15 @@ def start_training_processes(
         pool.starmap(train, parameter_list)
 
 if __name__ == '__main__':
-    log_directory = 'tb_logs'
-    run_indices = list(range(4))
+    log_directory = '../tb_logs'
+    run_indices = list(range(10))
     mem_dims = [32]
     path_lengths = [1]
     dropout_rates = [0.5]
     alphas = [0.999]
     batch_size = 50
-    train_size = 500
-    val_size = 500
+    train_size = 200000
+    val_size = 10000
 
     experiment_names = [
         'jsontreelstm-' + f'{pl=}-' + f'{md=}-' + f'{dr=}-' + f'{alpha=}-' + f'{batch_size=}-' + f'{train_size=}-' + f'{val_size=}'
@@ -124,6 +124,6 @@ if __name__ == '__main__':
             [False],
     ))
 
-    with NestablePool(processes=4) as pool:
+    with NestablePool(processes=5) as pool:
         for i in pool.imap(pool_train, parameter_list):
             print(i)

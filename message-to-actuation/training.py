@@ -68,6 +68,7 @@ def train(
 
     trainer = Trainer(
             gpus=gpus,
+            auto_select_gpus=True,
             max_epochs=max_epochs,
             logger=logger,
             callbacks=[
@@ -78,12 +79,13 @@ def train(
             num_sanity_val_steps=5,
             limit_predict_batches=5,
             progress_bar_refresh_rate=0,
+            val_check_interval=0.2,
     )
 
     trainer.predict(model, datamodule=datamodule)
     trainer.fit(model, datamodule=datamodule)
 
-    return 'ok!'
+    return f'Finished training experiment "{experiment_name}" version "version"'
 
 def pool_train(args: Tuple[Any, ...]):
     return train(*args)
