@@ -98,6 +98,7 @@ if __name__ == '__main__':
     batch_size = 50
     train_size = 200000
     val_size = 10000
+    max_epochs = 200
 
     experiment_names = [
         'jsontreelstm-' + f'{pl=}-' + f'{md=}-' + f'{dr=}-' + f'{alpha=}-' + f'{batch_size=}-' + f'{train_size=}-' + f'{val_size=}'
@@ -117,7 +118,7 @@ if __name__ == '__main__':
             experiment_names,
             [''],
             run_indices,
-            [1],
+            [max_epochs],
             [20],
             [train_size],
             [val_size],
