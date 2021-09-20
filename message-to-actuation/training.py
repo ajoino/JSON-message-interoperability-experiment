@@ -22,6 +22,8 @@ def train(
         tie_weights_primitives: bool = False,
         homogeneous_types: bool = False,
         number_average_fraction: float = 0.999,
+        label_loss_drop_rate: float = 0.75,
+        prediction_network_size: int = 1,
         # experiment parameters
         batch_size: int = 50,
         data_loader_workers: int = 4,
@@ -43,7 +45,9 @@ def train(
             tie_weights_containers,
             tie_weights_primitives,
             homogeneous_types,
-            number_average_fraction
+            number_average_fraction,
+            label_loss_drop_rate,
+            prediction_network_size
     )
     datamodule = SimulationDataModule(
             Path('../simulation_data_train.csv'),
