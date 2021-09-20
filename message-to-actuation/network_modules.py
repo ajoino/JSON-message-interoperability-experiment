@@ -1,4 +1,5 @@
 import os
+import random
 from collections import Sequence
 from pathlib import Path
 from typing import Any, List, Dict
@@ -23,6 +24,46 @@ class DynamicParameters:
     def __get__(self, instance, owner):
         return instance.parameters()
 
+
+class ReLUWithDropout(nn.Module):
+    def __init__(
+            self,
+            input_dim: int,
+            mem_dim: int,
+            output_dim: int,
+            num_layers: int,
+            dropout_rate: float,
+    ):
+        super().__init__()
+
+        self.input_dim = input_dim
+        self.mem_dim = mem_dim
+        self.output_dim = output_dim
+        self.num_layers = num_layers
+        self.dropout_rate = dropout_rate
+
+        if num_layers == 1:
+            self.linears = nn.ModuleList(
+                    [nn.Linear(input_dim, output_dim)]
+            )
+        else:
+            self.linears = nn.ModuleList(
+                    [
+                        nn.Linear(input_dim, mem_dim),
+                        *(nn.Linear(mem_dim, mem_dim) for _ in range(num_layers - 1)),
+                        nn.Linear(mem_dim, output_dim),
+                    ]
+            )
+        self.relus = (nn.ReLU() for _ in range(num_layers))
+        self.dropouts = (nn.Dropout() for _ in range(num_layers))
+
+    def forward(self, input: torch.Tensor):
+        x = input
+        for linear, relu, dropout in zip(self.linears, self.relus, self.dropouts):
+            x = dropout(relu(linear(x)))
+
+        return
+
 class MessageEncoder(pl.LightningModule):
     dynamic_parameters = DynamicParameters()
 
@@ -36,6 +77,8 @@ class MessageEncoder(pl.LightningModule):
             tie_weights_primitives: bool = False,
             homogeneous_types: bool = False,
             number_average_fraction: float = 0.999,
+            label_loss_drop_rate: float = 0.5,
+            prediction_network_size: int = 1,
     ):
         super().__init__()
         self.jsontreelstm = JSONTreeLSTM(
@@ -54,21 +97,38 @@ class MessageEncoder(pl.LightningModule):
                 nn.ReLU(),
                 nn.Dropout(dropout_rate),
         )
+        # TODO: Add more layers in the prediction subnetworks
         self.actuation_predict = nn.Sequential(
                 nn.Linear(mem_dim + 1, 30),
                 nn.ReLU(),
                 nn.Dropout(dropout_rate),
+                *[
+                    nn.Sequential(
+                    nn.Linear(30, 30),
+                    nn.ReLU(),
+                    nn.Dropout(dropout_rate),)
+                    for _ in range(prediction_network_size - 1)
+                ],
                 nn.Linear(30, 1)
         )
         self.label_predict = nn.Sequential(
                 nn.Linear(mem_dim, 30),
                 nn.ReLU(),
                 nn.Dropout(dropout_rate),
+                *[
+                    nn.Sequential(
+                            nn.Linear(30, 30),
+                            nn.ReLU(),
+                            nn.Dropout(dropout_rate),)
+                    for _ in range(prediction_network_size - 1)
+                ],
                 nn.Linear(30, 8),
         )
+        self.prediction_network_size = prediction_network_size
 
         self.label_loss = nn.CrossEntropyLoss()
         self.actuation_loss = nn.MSELoss()
+        self.label_loss_drop_rate = label_loss_drop_rate
 
         self.dropout_rate = dropout_rate
         self.train_step = 0
@@ -110,11 +170,15 @@ class MessageEncoder(pl.LightningModule):
         messages, room_labels, setpoints, actuations, prev_actuations = batch
         estimated_actuations, estimated_labels = self(messages, setpoints)
         actuation_loss = self.actuation_loss(estimated_actuations, actuations)
-        label_loss = self.label_loss(estimated_labels, room_labels.reshape(-1))
+        if label_drop := (random.uniform(0, 1) > self.label_loss_drop_rate):
+            label_loss = self.label_loss(estimated_labels, room_labels.reshape(-1))
+        else:
+            label_loss = 0
         train_loss = actuation_loss + label_loss
         self.log('train_loss', train_loss)
         self.log('actuation_loss', actuation_loss)
         self.log('label_loss', label_loss)
+        self.log('label_drop', int(label_drop))
         return train_loss
 
     def validation_step(self, batch, batch_idx):
@@ -196,25 +260,26 @@ class MessageEncoder(pl.LightningModule):
 if __name__ == '__main__':
     from pprint import pprint
 
-    model = MessageEncoder(mem_dim=128, decode_json=True)
+    model = MessageEncoder(mem_dim=32, decode_json=True, prediction_network_size=4)
     trainer = Trainer(
             gpus = 1 if torch.cuda.is_available() else None,
-            max_epochs=5,
+            max_epochs=40,
             logger=TestTubeLogger('tb_logs', name='my_model'),
             callbacks=[
                 ModelCheckpoint(monitor='val_loss'),
                 EarlyStopping(monitor='val_loss', patience=20),
             ],
-            resume_from_checkpoint='tb_logs/my_model/version_31/checkpoints/epoch=0-step=4.ckpt',
+            #resume_from_checkpoint='tb_logs/my_model/version_31/checkpoints/epoch=0-step=4.ckpt',
             fast_dev_run=False,
             terminate_on_nan=True,
-            limit_train_batches=5,
+            limit_train_batches=50,
             limit_val_batches=1,
             limit_predict_batches=10,
     )
 
     message_data = SimulationDataModule(Path('../simulation_data_new_all.csv'), batch_size=50, decode_json=True, num_workers=3)
-    #trainer.predict(model, datamodule=message_data)
+    trainer.predict(model, datamodule=message_data)
     trainer.fit(model, datamodule=message_data)
-    pprint(list(name for name in model.state_dict()))
+    #pprint(list(name for name in model.state_dict()))
+    #pprint(list(name for name in model.named_modules()))
 

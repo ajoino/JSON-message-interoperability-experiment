@@ -75,7 +75,7 @@ def start_training_processes(
     ## experiment parameters
     #batch_size: int = 50,
     #data_loader_workers: int = 4,
-    #log_directory: str = Path.cwd() / 'tb_logs',
+    #log_directory: str = Path.figure_dir() / 'tb_logs',
     #experiment_name: str = 'model',
     #experiment_description: str = '',
     #version: int = -1,
@@ -89,20 +89,22 @@ def start_training_processes(
         pool.starmap(train, parameter_list)
 
 if __name__ == '__main__':
-    log_directory = '../tb_logs'
-    run_indices = list(range(10))
+    log_directory = 'tb_logs/with_label_drop_and_multi_pred_layers/'
+    run_indices = list(range(4))
     mem_dims = [32]
     path_lengths = [1]
     dropout_rates = [0.5]
     alphas = [0.999]
+    label_drop_rates = [0.8]
+    num_layers = [10]
     batch_size = 50
     train_size = 200000
     val_size = 10000
     max_epochs = 200
 
     experiment_names = [
-        'jsontreelstm-' + f'{pl=}-' + f'{md=}-' + f'{dr=}-' + f'{alpha=}-' + f'{batch_size=}-' + f'{train_size=}-' + f'{val_size=}'
-        for pl, md, dr, alpha in zip(path_lengths, mem_dims, dropout_rates, alphas)
+        'jsontreelstm-' + f'{pl=}-' + f'{md=}-' + f'{label_dr=}-' + f'{nl=}-' + f'{dr=}-' + f'{alpha=}-' + f'{batch_size=}-' + f'{train_size=}-' + f'{val_size=}'
+        for pl, md, label_dr, nl, dr, alpha in zip(path_lengths, mem_dims, label_drop_rates, num_layers, dropout_rates, alphas)
     ]
 
     parameter_list = list(itertools.product(
@@ -112,6 +114,8 @@ if __name__ == '__main__':
             dropout_rates,
             [False], [False], [False],
             alphas,
+            label_drop_rates,
+            num_layers,
             [batch_size],
             [10],
             [log_directory],
