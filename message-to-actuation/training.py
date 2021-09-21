@@ -78,8 +78,8 @@ def train(
     )
 
     trainer = Trainer(
-            gpus=gpus,
-            auto_select_gpus=True,
+            gpus=[2],
+            #auto_select_gpus=True,
             max_epochs=max_epochs,
             logger=logger,
             callbacks=[
