@@ -63,6 +63,13 @@ def train(
     else:
         gpus = 1
 
+    experiment_name = (
+        f'{experiment_name}-{mem_dim=}-{path_length=}-{dropout_rate=}-'
+        f'{number_average_fraction=}-{label_loss_drop_rate=}-'
+        f'{prediction_network_size=}-{batch_size=}-{train_size=}-'
+        f'{val_size=}'
+    )
+
     logger = TestTubeLogger(
             log_directory,
             name=experiment_name,

@@ -89,17 +89,17 @@ def start_training_processes(
         pool.starmap(train, parameter_list)
 
 if __name__ == '__main__':
-    log_directory = 'tb_logs/with_label_drop_and_multi_pred_layers/'
+    log_directory = '../tb_logs/with_label_drop_and_multi_pred_layers/'
     run_indices = list(range(4))
     mem_dims = [32]
     path_lengths = [1]
     dropout_rates = [0.5]
     alphas = [0.999]
-    label_drop_rates = [0.8]
+    label_drop_rates = [0.2, 0.8]
     num_layers = [10]
     batch_size = 50
-    train_size = 200000
-    val_size = 10000
+    train_size = 200
+    val_size = 50
 
     experiment_names = [
         'jsontreelstm-' + f'{pl=}-' + f'{md=}-' + f'{label_dr=}-' + f'{nl=}-' + f'{dr=}-' + f'{alpha=}-' + f'{batch_size=}-' + f'{train_size=}-' + f'{val_size=}'
@@ -118,7 +118,7 @@ if __name__ == '__main__':
             [batch_size],
             [10],
             [log_directory],
-            experiment_names,
+            ['jsontreelstm'],
             [''],
             run_indices,
             [1],
@@ -127,6 +127,7 @@ if __name__ == '__main__':
             [val_size],
             [False],
     ))
+    from pprint import pprint
 
     with NestablePool(processes=5) as pool:
         for i in pool.imap(pool_train, parameter_list):
