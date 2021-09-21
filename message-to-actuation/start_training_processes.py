@@ -90,17 +90,17 @@ def start_training_processes(
 
 if __name__ == '__main__':
     log_directory = 'tb_logs/with_label_drop_and_multi_pred_layers/'
-    run_indices = list(range(4))
+    run_indices = list(range(5))
     mem_dims = [32]
     path_lengths = [1]
     dropout_rates = [0.5]
     alphas = [0.999]
-    label_drop_rates = [0.8]
-    num_layers = [10]
+    label_drop_rates = [0.2, 0.5]
+    num_layers = [3]
     batch_size = 50
     train_size = 200000
     val_size = 10000
-    max_epochs = 200
+    max_epochs = 60
 
     experiment_names = [
         'jsontreelstm-' + f'{pl=}-' + f'{md=}-' + f'{label_dr=}-' + f'{nl=}-' + f'{dr=}-' + f'{alpha=}-' + f'{batch_size=}-' + f'{train_size=}-' + f'{val_size=}'
@@ -123,12 +123,12 @@ if __name__ == '__main__':
             [''],
             run_indices,
             [max_epochs],
-            [20],
+            [10],
             [train_size],
             [val_size],
             [False],
     ))
 
-    with NestablePool(processes=5) as pool:
+    with NestablePool(processes=10) as pool:
         for i in pool.imap(pool_train, parameter_list):
             print(i)
