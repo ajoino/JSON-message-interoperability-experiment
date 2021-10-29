@@ -22,7 +22,7 @@ class NestablePool(multiprocessing.pool.Pool):
 
 
 if __name__ == '__main__':
-    log_directory = '../tb_logs/drop_time/'
+    log_directory = '../tb_logs/without_time_fields/'
     run_indices = list(range(1))
     mem_dims = [32]
     path_lengths = [1]
@@ -30,6 +30,7 @@ if __name__ == '__main__':
     alphas = [0.999]
     label_drop_rates = [0.0]
     num_layers = [2]
+    ignore_time_fields = True
     batch_size = 50
     train_size = 200
     val_size = 50
@@ -42,8 +43,8 @@ if __name__ == '__main__':
             dropout_rates,
             [False], [False], [False],
             alphas,
-            label_drop_rates,
             num_layers,
+            [ignore_time_fields],
             [batch_size],
             [10],
             [log_directory],

@@ -3,6 +3,7 @@ from typing import Sequence, Tuple, Any
 import itertools
 import datetime
 
+import pytorch_lightning
 import torch
 from torch.multiprocessing import Pool
 from pytorch_lightning.loggers import TestTubeLogger
@@ -37,6 +38,7 @@ def train(
         val_size: int = 5000,
         force_cpu: bool = False,
 ):
+    pytorch_lightning.seed_everything((1336 * version + 1), workers=True)
     model = MessageEncoder(
             mem_dim,
             decode_json,
@@ -95,7 +97,7 @@ def train(
     trainer.predict(model, datamodule=datamodule)
     trainer.fit(model, datamodule=datamodule)
 
-    return f'Finished training experiment "{experiment_name}" version "version"'
+    return f'Finished training experiment "{experiment_name}" version {version}'
 
 def pool_train(args: Tuple[Any, ...]):
     return train(*args)
