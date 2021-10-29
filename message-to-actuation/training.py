@@ -96,7 +96,7 @@ def train(
     trainer.predict(model, datamodule=datamodule)
     trainer.fit(model, datamodule=datamodule)
 
-    return f'Finished training experiment "{experiment_name}" version "version"'
+    return f'Finished training experiment "{experiment_name}" version {version}'
 
 def pool_train(args: Tuple[Any, ...]):
     return train(*args)
