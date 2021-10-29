@@ -1,13 +1,73 @@
 from pathlib import Path
 import json
+from pprint import pprint
+import csv
+from collections import defaultdict
+import itertools
+from functools import partial
 
 import torch
-from pytorch_lightning.loggers import TestTubeLogger
+from pytorch_lightning.loggers import TestTubeLogger, TensorBoardLogger
+from test_tube import Experiment
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
+import pandas as pd
 
 from datamodule import SimulationDataModule
 from network_modules import MessageEncoder
+
+
+def find_top_n_checkpoints(experiments_path: Path, n: int = 3):
+    experiment_metrics = pd.read_csv(experiments_path / 'all_metrics.csv')
+
+    groups = experiment_metrics.groupby(['mem_dim', 'prediction_network_size', 'version'])
+    #val_metrics = groups[['val_loss', 'val_accuracy', 'val_actuation_loss']]
+    val_min = groups['val_loss'].min()
+    val_best_versions = val_min.groupby(
+            level=[0, 1]
+    ).nsmallest(
+            n
+    ).droplevel(
+            level=[0, 1]
+    ).reset_index(
+    ).drop(
+            'val_loss',
+            axis='columns'
+    )
+
+    return val_best_versions
+
+
+def get_meta_tags(experiment_dir: Path):
+    with open(experiment_dir / 'version_0' / 'meta_tags.csv', 'r') as meta_tags_csv:
+        reader = csv.reader(meta_tags_csv)
+        meta_tags = dict(row for row in reader)  # type: ignore
+
+    return meta_tags
+
+
+def get_top_models(experiment_path: Path, top_model_version_df: pd.DataFrame):
+    models_dict = defaultdict(lambda: defaultdict(list))
+    for experiment_dir in (
+            dir for dir in experiment_path.iterdir()
+            if (not 'label_loss_drop_rate=0.1' in dir.name) and dir.is_dir() and
+            not 'test_results' in dir.name
+    ):
+        meta_tags = get_meta_tags(experiment_dir)
+
+        experiment_versions = top_model_version_df[
+            (top_model_version_df['mem_dim'] == int(meta_tags['mem_dim'])) &
+            (top_model_version_df['prediction_network_size'] == int(meta_tags['prediction_network_size']))
+        ]['version'].values
+
+        for version in experiment_versions:
+            checkpoint_path, *_ = list((experiment_dir / version / 'checkpoints').glob('*.ckpt'))
+            model = MessageEncoder.load_from_checkpoint(checkpoint_path)
+            #model.eval()
+            models_dict[meta_tags['mem_dim']][meta_tags['prediction_network_size']].append(model)
+
+    return models_dict
+
 
 def str_to_parameter_type(parameter_str: str):
     if parameter_str == 'True':
@@ -50,7 +110,7 @@ def test_single_checkpoint(
     else:
         gpus = 1
 
-    logger = TestTubeLogger(
+    logger = TensorBoardLogger(
             str(Path(experiment_version_path).parent.parent),
             name=experiment_metadata['name'],
             version=experiment_metadata['version'],
@@ -60,6 +120,7 @@ def test_single_checkpoint(
     checkpoint_path, *_ = list((Path(experiment_version_path) / 'checkpoints').glob('*.ckpt'))
     model = MessageEncoder.load_from_checkpoint(checkpoint_path)
     model.eval()
+
 
     trainer = Trainer(
             gpus=gpus,
@@ -92,5 +153,62 @@ def test_all_checkpoints(
         except (RuntimeError, ValueError):
             continue
 
+def test_model_checkpoint(model: MessageEncoder, experiments_test_path: Path):
+    """
+    with open(Path(experiment_version_path) / 'meta.experiment', 'r') as meta_file:
+        experiment_metadata = json.load(meta_file)
+    """
+
+    datamodule = SimulationDataModule(
+            Path('../simulation_data_test.csv'),
+            50,
+            True,
+            4,
+            test_size=10000,
+    )
+
+    logger = TensorBoardLogger(
+            str(Path(experiments_test_path)),
+            name='test_results',
+            version='',
+            #description=experiment_metadata['description'] or ''
+    )
+
+    model.eval()
+
+    if torch.cuda.is_available():
+        gpus = 1
+    else:
+        gpus = None
+
+    trainer = Trainer(
+            gpus=gpus,
+            logger=logger,
+            terminate_on_nan=True,
+    )
+
+    trainer.test(model, datamodule=datamodule)
+    average_metrics = pd.DataFrame({
+            key: [value] for key, value in trainer.logged_metrics.items()
+            if key in {'test_accuracy', 'test_mse'}
+        } | {'mem_dim': model.mem_dim, 'size': model.prediction_network_size}
+    )
+    try:
+        logged_average_metrics = pd.read_csv(experiments_test_path / 'test_metrics.csv')
+        logged_average_metrics = logged_average_metrics.append(average_metrics)
+    except FileNotFoundError:
+        logged_average_metrics = average_metrics
+
+    logged_average_metrics.to_csv(experiments_test_path / 'test_metrics.csv', index=False)
+
 if __name__ == '__main__':
-    test_all_checkpoints('tb_logs/model')
+    experiment_path = Path('../tb_logs/with_label_drop_and_multi_pred_layers/')
+    top_versions = find_top_n_checkpoints(experiment_path)
+    top_models = get_top_models(
+            experiment_path,
+            top_versions,
+    )
+    for top_models_by_mem_dim in top_models.values():
+        for top_models_by_size in top_models_by_mem_dim.values():
+            for model in top_models_by_size:
+                test_model_checkpoint(model, experiment_path / 'test_results')
