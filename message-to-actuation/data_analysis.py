@@ -18,9 +18,8 @@ def get_logs(host: str, user: str, remote_dir: str, target_dir: str):
 
 
 def handle_metrics(version_dir: Path):
-    name = version_dir.name
     df = pd.read_csv(version_dir / 'metrics.csv')
-    df['version'] = name
+    df['version'] = version_dir.name
     df['process'] = ''
     df['process'][~df['train_loss'].isna()] = 'train'
     df['process'][~df['val_loss'].isna()] = 'val'

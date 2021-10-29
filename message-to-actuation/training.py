@@ -22,8 +22,8 @@ def train(
         tie_weights_primitives: bool = False,
         homogeneous_types: bool = False,
         number_average_fraction: float = 0.999,
-        label_loss_drop_rate: float = 0.75,
         prediction_network_size: int = 1,
+        ignore_time_fields: bool = True,
         # experiment parameters
         batch_size: int = 50,
         data_loader_workers: int = 4,
@@ -46,7 +46,6 @@ def train(
             tie_weights_primitives,
             homogeneous_types,
             number_average_fraction,
-            label_loss_drop_rate,
             prediction_network_size
     )
     datamodule = SimulationDataModule(
@@ -56,6 +55,7 @@ def train(
             data_loader_workers,
             train_size=train_size,
             val_size=val_size,
+            ignore_time_fields=ignore_time_fields,
     )
 
     if force_cpu or not torch.cuda.is_available():
@@ -65,9 +65,8 @@ def train(
 
     experiment_name = (
         f'{experiment_name}-{mem_dim=}-{path_length=}-{dropout_rate=}-'
-        f'{number_average_fraction=}-{label_loss_drop_rate=}-'
-        f'{prediction_network_size=}-{batch_size=}-{train_size=}-'
-        f'{val_size=}'
+        f'{number_average_fraction=}-{prediction_network_size=}-'
+        f'{batch_size=}-{train_size=}-{val_size=}'
     )
 
     logger = TestTubeLogger(
@@ -78,13 +77,13 @@ def train(
     )
 
     trainer = Trainer(
-            gpus=[2],
+            gpus=None,
             #auto_select_gpus=True,
             max_epochs=max_epochs,
             logger=logger,
             callbacks=[
                 ModelCheckpoint(monitor='val_loss'),
-                EarlyStopping(monitor='val_loss', patience=patience),
+                #EarlyStopping(monitor='val_loss', patience=patience),
             ],
             terminate_on_nan=True,
             num_sanity_val_steps=5,

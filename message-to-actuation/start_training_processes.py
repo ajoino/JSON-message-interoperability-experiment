@@ -22,18 +22,18 @@ class NestablePool(multiprocessing.pool.Pool):
 
 
 if __name__ == '__main__':
-    log_directory = '../tb_logs/with_label_drop_and_multi_pred_layers/'
-    run_indices = list(range(4))
+    log_directory = '../tb_logs/drop_time/'
+    run_indices = list(range(1))
     mem_dims = [32]
     path_lengths = [1]
     dropout_rates = [0.5]
     alphas = [0.999]
-    label_drop_rates = [0.2, 0.5]
+    label_drop_rates = [0.0]
     num_layers = [2]
     batch_size = 50
-    train_size = 200000
-    val_size = 10000
-    max_epochs = 60
+    train_size = 200
+    val_size = 50
+    max_epochs = 1
 
     parameter_list = list(itertools.product(
             mem_dims,

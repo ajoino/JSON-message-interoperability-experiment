@@ -3,6 +3,7 @@ import random
 from collections import Sequence
 from pathlib import Path
 from typing import Any, List, Dict
+from pprint import pprint
 
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TestTubeLogger
@@ -77,10 +78,12 @@ class MessageEncoder(pl.LightningModule):
             tie_weights_primitives: bool = False,
             homogeneous_types: bool = False,
             number_average_fraction: float = 0.999,
-            label_loss_drop_rate: float = 0.5,
             prediction_network_size: int = 1,
     ):
         super().__init__()
+        self.prediction_network_size = int(prediction_network_size)
+        self.mem_dim = mem_dim
+
         self.jsontreelstm = JSONTreeLSTM(
                 mem_dim,
                 decode_json,
@@ -107,7 +110,7 @@ class MessageEncoder(pl.LightningModule):
                     nn.Linear(30, 30),
                     nn.ReLU(),
                     nn.Dropout(dropout_rate),)
-                    for _ in range(prediction_network_size - 1)
+                    for _ in range(self.prediction_network_size - 1)
                 ],
                 nn.Linear(30, 1)
         )
@@ -120,15 +123,12 @@ class MessageEncoder(pl.LightningModule):
                             nn.Linear(30, 30),
                             nn.ReLU(),
                             nn.Dropout(dropout_rate),)
-                    for _ in range(prediction_network_size - 1)
+                    for _ in range(self.prediction_network_size - 1)
                 ],
                 nn.Linear(30, 8),
         )
-        self.prediction_network_size = prediction_network_size
-
         self.label_loss = nn.CrossEntropyLoss()
         self.actuation_loss = nn.MSELoss()
-        self.label_loss_drop_rate = label_loss_drop_rate
 
         self.dropout_rate = dropout_rate
         self.train_step = 0
@@ -153,6 +153,7 @@ class MessageEncoder(pl.LightningModule):
 
     def on_test_start(self):
         self.jsontreelstm.apply(lambda m: set_device_in_children(m, self.device))
+        #self.jsontreelstm.register_forward_hook(pass)
 
     def forward(self, messages: Sequence[str], setpoints: torch.Tensor):
         encoded_messages = self.common(torch.cat([self.jsontreelstm(message) for message in messages]))
@@ -161,24 +162,20 @@ class MessageEncoder(pl.LightningModule):
 
         return actuation_out, label_out
 
-    def predict_step(self, batch, batch_idx):
+    def predict_step(self, batch, batch_idx, dataloader_idx = None):
         messages, room_labels, setpoints, actuations, prev_actuations = batch
-        #print(room_labels)
-        estimated_actuations = self(messages, setpoints)
+
+        return self(messages, setpoints)
 
     def training_step(self, batch, batch_idx):
         messages, room_labels, setpoints, actuations, prev_actuations = batch
         estimated_actuations, estimated_labels = self(messages, setpoints)
         actuation_loss = self.actuation_loss(estimated_actuations, actuations)
-        if label_drop := (random.uniform(0, 1) > self.label_loss_drop_rate):
-            label_loss = self.label_loss(estimated_labels, room_labels.reshape(-1))
-        else:
-            label_loss = 0
+        label_loss = self.label_loss(estimated_labels, room_labels.reshape(-1))
         train_loss = actuation_loss + label_loss
         self.log('train_loss', train_loss)
         self.log('actuation_loss', actuation_loss)
         self.log('label_loss', label_loss)
-        self.log('label_drop', int(label_drop))
         return train_loss
 
     def validation_step(self, batch, batch_idx):
@@ -212,30 +209,21 @@ class MessageEncoder(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         messages, room_labels, setpoints, actuations, prev_actuations = batch
         estimated_actuations, estimated_labels = self(messages, setpoints)
-        actuation_loss = self.actuation_loss(estimated_actuations, actuations)
-        label_loss = self.label_loss(estimated_labels, room_labels.reshape(-1))
-        test_loss = actuation_loss + label_loss
         return {
-            'test_loss': test_loss.reshape(-1),
-            'actuation_loss': actuation_loss.reshape(-1),
-            'label_loss': label_loss.reshape(-1),
+            'pred_actuations': estimated_actuations,
+            'true_actuations': actuations,
             'pred_labels': torch.argmax(estimated_labels, dim=1),
             'true_labels': room_labels.reshape(-1)
         }
 
     def test_epoch_end(self, outputs: EPOCH_OUTPUT) -> None:
-        testing_metrics = {
-            label: torch.cat([metric_dict[label] for metric_dict in outputs]) for label in outputs[0]}
-        mean_test_loss = torch.mean(testing_metrics['test_loss'])
-        std_test_loss = torch.std(testing_metrics['test_loss'])
-        actuation_loss = torch.mean(testing_metrics['actuation_loss'])
-        label_loss = torch.mean(testing_metrics['label_loss'])
+        testing_metrics: Dict[str, torch.Tensor] = {
+            label: torch.cat([metric_dict[label] for metric_dict in outputs]) for label in outputs[0]
+        }
+        test_mse = torch.mean((testing_metrics['pred_actuations'] - testing_metrics['true_actuations'])**2)
         test_accuracy = torch.sum(testing_metrics['pred_labels'] == testing_metrics['true_labels']) / len(testing_metrics['pred_labels'])
-        self.log('test_loss', mean_test_loss, prog_bar=True)
-        self.log('test_loss_std', std_test_loss)
         self.log('test_accuracy', test_accuracy)
-        self.log('test_actuation_loss', actuation_loss)
-        self.log('test_label_loss', label_loss)
+        self.log('test_mse', test_mse)
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.dynamic_parameters)
@@ -246,7 +234,6 @@ class MessageEncoder(pl.LightningModule):
         for embedder, paths_list in paths.items():
             for paths_str in paths_list:
                 getattr(self.jsontreelstm, embedder).add_path(paths_str)
-        #print(self.jsontreelstm)
 
     def on_save_checkpoint(self, checkpoint: Dict[str, Any]):
         checkpoint['json_subnetworks'] = {
@@ -267,7 +254,7 @@ if __name__ == '__main__':
             logger=TestTubeLogger('tb_logs', name='my_model'),
             callbacks=[
                 ModelCheckpoint(monitor='val_loss'),
-                EarlyStopping(monitor='val_loss', patience=20),
+                #EarlyStopping(monitor='val_loss', patience=20),
             ],
             #resume_from_checkpoint='tb_logs/my_model/version_31/checkpoints/epoch=0-step=4.ckpt',
             fast_dev_run=False,
@@ -277,9 +264,7 @@ if __name__ == '__main__':
             limit_predict_batches=10,
     )
 
-    message_data = SimulationDataModule(Path('../simulation_data_new_all.csv'), batch_size=50, decode_json=True, num_workers=3)
+    message_data = SimulationDataModule(Path('../simulation_data_train.csv'), batch_size=50, decode_json=True, num_workers=3)
     trainer.predict(model, datamodule=message_data)
     trainer.fit(model, datamodule=message_data)
-    #pprint(list(name for name in model.state_dict()))
-    #pprint(list(name for name in model.named_modules()))
 
