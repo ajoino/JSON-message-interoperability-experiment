@@ -1,6 +1,6 @@
 from functools import partial
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict
 
 import pytorch_lightning as pl
 import torch
@@ -14,10 +14,24 @@ import json
 
 from dataset import MessageDataset
 
-def list_collator(batch, decode_json=False):
+def filter_time_fields(message: Dict, do_filtering: bool):
+    if not do_filtering:
+        return message
+
+    if message[0].get("t", None) is not None:
+        del message[0]["t"]
+    elif message[0].get("bt", None) is not None:
+        del message[0]["bt"]
+
+    return message
+
+def list_collator(batch, decode_json=False, ignore_time_fields: bool= True):
     collated = default_collate(batch)
     if decode_json:
-        collated[0] = [json.loads(message) for message in collated[0]]
+        collated[0] = [
+            filter_time_fields(json.loads(message), ignore_time_fields)
+            for message in collated[0]
+        ]
     return collated
 
 
@@ -31,6 +45,7 @@ class SimulationDataModule(pl.LightningDataModule):
             train_size: int = 55000,
             val_size: int = 5000,
             test_size: int = 10000,
+            ignore_time_fields: bool = True,
     ):
         super().__init__()
         self.data_dir = data_dir
@@ -40,6 +55,12 @@ class SimulationDataModule(pl.LightningDataModule):
         self.train_size = train_size
         self.val_size = val_size
         self.test_size = test_size
+        self.ignore_time_fields = ignore_time_fields
+        self.collate_fn = partial(
+                list_collator,
+                decode_json=self.decode_json,
+                ignore_time_fields=self.ignore_time_fields,
+        )
 
         self.setpoint_transform = transforms.Compose([
             torch.Tensor,
@@ -65,8 +86,7 @@ class SimulationDataModule(pl.LightningDataModule):
                     ), [i for i in range(self.train_size + self.val_size)])
                     , [self.train_size, self.val_size]
             )
-
-        if stage == 'test' or stage is None:
+        elif stage == 'test':
             self.message_data_test = Subset(
                     md := MessageDataset(
                     self.data_dir,
@@ -81,7 +101,7 @@ class SimulationDataModule(pl.LightningDataModule):
                 self.message_data_train,
                 batch_size=self.batch_size,
                 num_workers=self.num_workers,
-                collate_fn=partial(list_collator, decode_json=self.decode_json),
+                collate_fn=self.collate_fn,
         )
 
     def val_dataloader(self):
@@ -89,7 +109,7 @@ class SimulationDataModule(pl.LightningDataModule):
                 self.message_data_val,
                 batch_size=self.batch_size,
                 num_workers=self.num_workers,
-                collate_fn=partial(list_collator, decode_json=self.decode_json),
+                collate_fn=self.collate_fn,
         )
 
     def test_dataloader(self):
@@ -97,7 +117,7 @@ class SimulationDataModule(pl.LightningDataModule):
                 self.message_data_test,
                 batch_size=self.batch_size,
                 num_workers=self.num_workers,
-                collate_fn=partial(list_collator, decode_json=self.decode_json),
+                collate_fn=self.collate_fn,
         )
 
     def predict_dataloader(self):
@@ -105,5 +125,5 @@ class SimulationDataModule(pl.LightningDataModule):
                 self.message_data_val,
                 batch_size=self.batch_size,
                 num_workers=self.num_workers,
-                collate_fn=partial(list_collator, decode_json=self.decode_json),
+                collate_fn=self.collate_fn,
         )
