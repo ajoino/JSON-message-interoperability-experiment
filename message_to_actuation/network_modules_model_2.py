@@ -1,22 +1,13 @@
-import os
-import random
 from collections import Sequence
-from pathlib import Path
 from typing import Any, List, Dict
-from pprint import pprint
 
 import pytorch_lightning as pl
-from pytorch_lightning.loggers import TestTubeLogger
 import torch.optim
-from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from pytorch_lightning.utilities.types import EPOCH_OUTPUT
 from torch import nn
-from torch.optim.lr_scheduler import ReduceLROnPlateau, CyclicLR
 
 from json2vec.json2vec import JSONTreeLSTM
 
-from datamodule import SimulationDataModule
 
 def set_device_in_children(module: nn.Module, device):
     module.device = device
@@ -79,10 +70,12 @@ class MessageEncoder(pl.LightningModule):
             homogeneous_types: bool = False,
             number_average_fraction: float = 0.999,
             prediction_network_size: int = 1,
+            num_previous_actuations: int = 0,
     ):
         super().__init__()
         self.prediction_network_size = int(prediction_network_size)
         self.mem_dim = mem_dim
+        self.num_previous_actuations = num_previous_actuations
 
         self.jsontreelstm = JSONTreeLSTM(
                 mem_dim,
@@ -102,7 +95,7 @@ class MessageEncoder(pl.LightningModule):
         )
         # TODO: Add more layers in the prediction subnetworks
         self.actuation_predict = nn.Sequential(
-                nn.Linear(mem_dim + 1, 30),
+                nn.Linear(mem_dim + 1 + self.num_previous_actuations, 30),
                 nn.ReLU(),
                 nn.Dropout(dropout_rate),
                 *[
@@ -155,9 +148,15 @@ class MessageEncoder(pl.LightningModule):
         self.jsontreelstm.apply(lambda m: set_device_in_children(m, self.device))
         #self.jsontreelstm.register_forward_hook(pass)
 
-    def forward(self, messages: Sequence[str], setpoints: torch.Tensor):
-        encoded_messages = self.common(torch.cat([self.jsontreelstm(message) for message in messages]))
-        actuation_out = self.actuation_predict(torch.cat([encoded_messages, setpoints], dim=1))
+    def forward(self, messages: Sequence[str], setpoints: torch.Tensor, previous_actuations: torch.Tensor):
+        encoded_messages = self.common(torch.cat([
+            self.jsontreelstm(message) for message in messages
+        ]))
+        actuation_out = self.actuation_predict(torch.cat([
+            encoded_messages,
+            setpoints,
+            previous_actuations[:, 0:self.num_previous_actuations]
+        ], dim=1))
         label_out = self.label_predict(encoded_messages)
 
         return actuation_out, label_out
@@ -165,11 +164,11 @@ class MessageEncoder(pl.LightningModule):
     def predict_step(self, batch, batch_idx, dataloader_idx = None):
         messages, room_labels, setpoints, actuations, prev_actuations = batch
 
-        return self(messages, setpoints)
+        return self(messages, setpoints, prev_actuations)
 
     def training_step(self, batch, batch_idx):
         messages, room_labels, setpoints, actuations, prev_actuations = batch
-        estimated_actuations, estimated_labels = self(messages, setpoints)
+        estimated_actuations, estimated_labels = self(messages, setpoints, prev_actuations)
         actuation_loss = self.actuation_loss(estimated_actuations, actuations)
         label_loss = self.label_loss(estimated_labels, room_labels.reshape(-1))
         train_loss = actuation_loss + label_loss
@@ -180,7 +179,7 @@ class MessageEncoder(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         messages, room_labels, setpoints, actuations, prev_actuations = batch
-        estimated_actuations, estimated_labels = self(messages, setpoints)
+        estimated_actuations, estimated_labels = self(messages, setpoints, prev_actuations)
         actuation_loss = self.actuation_loss(estimated_actuations, actuations)
         label_loss = self.label_loss(estimated_labels, room_labels.reshape(-1))
         val_loss = actuation_loss + label_loss
@@ -208,7 +207,7 @@ class MessageEncoder(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         messages, room_labels, setpoints, actuations, prev_actuations = batch
-        estimated_actuations, estimated_labels = self(messages, setpoints)
+        estimated_actuations, estimated_labels = self(messages, setpoints, prev_actuations)
         return {
             'pred_actuations': estimated_actuations,
             'true_actuations': actuations,
@@ -224,9 +223,11 @@ class MessageEncoder(pl.LightningModule):
         test_accuracy = torch.sum(testing_metrics['pred_labels'] == testing_metrics['true_labels']) / len(testing_metrics['pred_labels'])
         self.log('test_accuracy', test_accuracy)
         self.log('test_mse', test_mse)
+        self.test_pred_actuations = testing_metrics['pred_actuations'].detach().cpu().numpy()
+        self.test_true_actuations = testing_metrics['true_actuations'].detach().cpu().numpy()
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.dynamic_parameters)
+        optimizer = torch.optim.Adam(self.dynamic_parameters, weight_decay=0.0001)
         return optimizer
 
     def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
@@ -242,29 +243,4 @@ class MessageEncoder(pl.LightningModule):
             'string_embedder': list(self.jsontreelstm.string_embedder.paths),
             'number_embedder': list(self.jsontreelstm.number_embedder.paths),
         }
-
-
-if __name__ == '__main__':
-    from pprint import pprint
-
-    model = MessageEncoder(mem_dim=32, decode_json=True, prediction_network_size=4)
-    trainer = Trainer(
-            gpus = 1 if torch.cuda.is_available() else None,
-            max_epochs=40,
-            logger=TestTubeLogger('tb_logs', name='my_model'),
-            callbacks=[
-                ModelCheckpoint(monitor='val_loss'),
-                #EarlyStopping(monitor='val_loss', patience=20),
-            ],
-            #resume_from_checkpoint='tb_logs/my_model/version_31/checkpoints/epoch=0-step=4.ckpt',
-            fast_dev_run=False,
-            terminate_on_nan=True,
-            limit_train_batches=50,
-            limit_val_batches=1,
-            limit_predict_batches=10,
-    )
-
-    message_data = SimulationDataModule(Path('../simulation_data_train.csv'), batch_size=50, decode_json=True, num_workers=3)
-    trainer.predict(model, datamodule=message_data)
-    trainer.fit(model, datamodule=message_data)
 

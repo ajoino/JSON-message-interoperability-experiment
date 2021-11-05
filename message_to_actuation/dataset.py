@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, Optional, Tuple, Dict, List, Union
 
 import pandas as pd
+import torch
 from torch.utils.data import Dataset
 
 
@@ -31,11 +32,11 @@ class MessageDataset(Dataset):
     def __len__(self) -> int:
         return len(self.simulation_data)
 
-    def __getitem__(self, idx: int) -> Tuple[List[Dict], int, float, float, float]: # Returns message, room label, setpoint, and actuation value
+    def __getitem__(self, idx: int) -> Tuple[List[Dict], int, float, float, torch.Tensor]: # Returns message, room label, setpoint, and actuation value
         message = self.simulation_data.loc[idx, 'message']
-        room_name_sample, setpoint_sample, actuation_sample, prev_actuation_sample = (
+        room_name_sample, setpoint_sample, actuation_sample, prev_actuation_sample_1, prev_actuation_sample_2, prev_actuation_sample_3 = (
             self.simulation_data.loc[idx, column]
-            for column in ('room_name', 'setpoint', 'actuation', 'previous_actuation')
+            for column in ('room_name', 'setpoint', 'actuation', 'previous_actuation_1', 'previous_actuation_2', 'previous_actuation_3')
         )
 
         if self.room_transform:
@@ -46,13 +47,16 @@ class MessageDataset(Dataset):
             setpoint_sample = self.setpoint_transform((setpoint_sample, ))
         if self.actuation_transform:
             actuation_sample = self.actuation_transform((actuation_sample, ))
-            prev_actuation_sample = self.actuation_transform((prev_actuation_sample, ))
+            prev_actuation_sample_1 = self.actuation_transform((prev_actuation_sample_1,))
+            prev_actuation_sample_2 = self.actuation_transform((prev_actuation_sample_2,))
+            prev_actuation_sample_3 = self.actuation_transform((prev_actuation_sample_3,))
+            prev_actuations_sample = torch.cat((prev_actuation_sample_1, prev_actuation_sample_2, prev_actuation_sample_3), axis=0)
         return (
             message,
             room_name_sample,
             setpoint_sample,
             actuation_sample,
-            prev_actuation_sample
+            prev_actuations_sample,
         )
 
 if __name__ == '__main__':

@@ -11,7 +11,7 @@ from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 
 from datamodule import SimulationDataModule
-from network_modules import MessageEncoder
+from network_modules_model_2 import MessageEncoder
 
 def train(
         # model parameters

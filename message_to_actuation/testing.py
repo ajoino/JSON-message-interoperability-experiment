@@ -1,4 +1,5 @@
 from pathlib import Path
+import shutil
 import json
 from pprint import pprint
 import csv
@@ -14,7 +15,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 import pandas as pd
 
 from datamodule import SimulationDataModule
-from network_modules import MessageEncoder
+from network_modules_model_2 import MessageEncoder
 
 
 def find_top_n_checkpoints(experiments_path: Path, n: int = 3):
@@ -64,7 +65,7 @@ def get_top_models(experiment_path: Path, top_model_version_df: pd.DataFrame):
             checkpoint_path, *_ = list((experiment_dir / version / 'checkpoints').glob('*.ckpt'))
             model = MessageEncoder.load_from_checkpoint(checkpoint_path)
             #model.eval()
-            models_dict[meta_tags['mem_dim']][meta_tags['prediction_network_size']].append(model)
+            models_dict[meta_tags['mem_dim']][meta_tags['prediction_network_size']].append((version, model))
 
     return models_dict
 
@@ -153,7 +154,7 @@ def test_all_checkpoints(
         except (RuntimeError, ValueError):
             continue
 
-def test_model_checkpoint(model: MessageEncoder, experiments_test_path: Path):
+def test_model_checkpoint(model: MessageEncoder, version: int, experiments_test_path: Path):
     """
     with open(Path(experiment_version_path) / 'meta.experiment', 'r') as meta_file:
         experiment_metadata = json.load(meta_file)
@@ -188,21 +189,46 @@ def test_model_checkpoint(model: MessageEncoder, experiments_test_path: Path):
     )
 
     trainer.test(model, datamodule=datamodule)
+    print([name for name in trainer.logged_metrics])
     average_metrics = pd.DataFrame({
             key: [value] for key, value in trainer.logged_metrics.items()
             if key in {'test_accuracy', 'test_mse'}
-        } | {'mem_dim': model.mem_dim, 'size': model.prediction_network_size}
+        } | {'mem_dim': model.mem_dim, 'size': model.prediction_network_size, 'version': version}
     )
     try:
         logged_average_metrics = pd.read_csv(experiments_test_path / 'test_metrics.csv')
         logged_average_metrics = logged_average_metrics.append(average_metrics)
     except FileNotFoundError:
         logged_average_metrics = average_metrics
-
     logged_average_metrics.to_csv(experiments_test_path / 'test_metrics.csv', index=False)
 
+    timeline_results = pd.DataFrame(
+            index=range(0, len(model.test_pred_actuations)),
+            data = {
+                'timestep': range(0, len(model.test_pred_actuations)),
+                'test_pred_actuations': model.test_pred_actuations.flatten(),
+                'test_true_actuations': model.test_true_actuations.flatten(),
+            }
+    )
+    timeline_results['mem_dim'] = model.mem_dim
+    timeline_results['size'] = model.prediction_network_size
+    timeline_results['version'] = version
+
+    print(timeline_results)
+    try:
+        logged_timeline_results = pd.read_csv(experiments_test_path / 'test_actuations.csv')
+        logged_timeline_results = logged_timeline_results.append(timeline_results)
+    except FileNotFoundError:
+        logged_timeline_results = timeline_results
+    logged_timeline_results.to_csv(experiments_test_path / 'test_actuations.csv', index=False)
+
+
+
+def model_over_time(model: MessageEncoder, ):
+    pass
+
 if __name__ == '__main__':
-    experiment_path = Path('../tb_logs/with_label_drop_and_multi_pred_layers/')
+    experiment_path = Path('../tb_logs/without_time_fields/')
     top_versions = find_top_n_checkpoints(experiment_path)
     top_models = get_top_models(
             experiment_path,
@@ -210,5 +236,6 @@ if __name__ == '__main__':
     )
     for top_models_by_mem_dim in top_models.values():
         for top_models_by_size in top_models_by_mem_dim.values():
-            for model in top_models_by_size:
-                test_model_checkpoint(model, experiment_path / 'test_results')
+            for version, model in top_models_by_size:
+                version_num = int(version.split('_')[-1])
+                test_model_checkpoint(model, version_num, experiment_path / 'test_results')

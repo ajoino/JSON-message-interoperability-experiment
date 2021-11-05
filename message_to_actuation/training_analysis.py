@@ -66,26 +66,26 @@ def plot_validation_data(metrics: pd.DataFrame, max_epoch: int = 40):
     sns.lineplot(y='val_loss', x='progress', hue='mem_dim', style='prediction_network_size', data=metrics[metrics['epoch'] <= max_epoch], ci=None)
     plt.ylabel('Validation Loss')
     plt.xlabel('Progress (epochs)')
-    #plt.savefig('../../figures/train_loss.pdf')
+    plt.savefig('../../figures/val_loss.pdf')
 
     plt.figure()
     sns.lineplot(y='val_accuracy', x='progress', hue='mem_dim', style='prediction_network_size', data=metrics[metrics['epoch'] <= max_epoch], ci=None)
     plt.ylabel('Validation Accuracy')
     plt.xlabel('Progress (epochs)')
-    #plt.savefig('../../figures/train_loss.pdf')
+    plt.savefig('../../figures/val_acc.pdf')
 
     plt.figure()
-    sns.lineplot(y='val_actuation_loss', x='progress', hue='mem_dim', style='prediction_network_size', data=metrics[metrics['epoch'] <= max_epoch], ci=None, estimator='min')
+    sns.lineplot(y='val_actuation_loss', x='progress', hue='mem_dim', style='prediction_network_size', data=metrics[metrics['epoch'] <= max_epoch], ci=None)
     plt.ylabel('Validation Actuation MSE')
     plt.xlabel('Progress (epochs)')
-    #plt.savefig('../../figures/train_loss.pdf')
+    plt.savefig('../../figures/val_actuation_loss.pdf')
 
 if __name__ == '__main__':
-    experiment_path = Path('~/articles/spring_2021_experiment/tb_logs/with_label_drop_and_multi_pred_layers/')
+    experiment_path = Path('~/articles/spring_2021_experiment/tb_logs/without_time_fields/')
     experiment_metrics = generate_tables(experiment_path)
     print(experiment_metrics.shape)
     print(experiment_metrics.columns)
-    experiment_metrics = experiment_metrics[experiment_metrics['label_loss_drop_rate'] == '0.0']
+    #experiment_metrics = experiment_metrics[experiment_metrics['label_loss_drop_rate'] == '0.0']
     print(experiment_metrics.shape)
 
     experiment_metrics.to_csv(experiment_path / 'all_metrics.csv')
